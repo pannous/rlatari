@@ -1,15 +1,21 @@
-import os.path
-import time
-import random
-import numpy as np
+from __future__ import annotations
 
+import random
+import time
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-
 from stable_baselines3.common.buffers import ReplayBuffer
 from torch.utils.tensorboard import SummaryWriter
+
 from .utils import layer_init, linear_schedule
+
+if TYPE_CHECKING:
+    from omegaconf import DictConfig
 
 
 class CNNQNetwork(nn.Module):
@@ -71,11 +77,11 @@ class Policy:
                 self.args.tau * q_network_param.data + (1.0 - self.args.tau) * target_network_param.data
             )
 
-    def save_model(self, save_path):
+    def save_model(self, save_path: str | Path) -> None:
         torch.save(self.q_network.state_dict(), save_path)
 
-    def load_model(self, model_path):
-        self.q_network.load_state_dict(torch.load(model_path))
+    def load_model(self, model_path: str | Path) -> None:
+        self.q_network.load_state_dict(torch.load(model_path, weights_only=True))
 
 
 class Agent:
@@ -159,19 +165,19 @@ class Agent:
                     self.policy.update_target()
                 if self.paths.model and global_step % self.paths.model_freq == 0:
                     print(f"===> saving model:{global_step}")
-                    save_path = os.path.join(self.paths.model_path, "model-" + str(global_step) + ".pth")
+                    save_path = Path(self.paths.model_path) / f"model-{global_step}.pth"
                     self.policy.save_model(save_path)
 
         print("============================================================")
         print("eval")
         eval_rewards = []
-        eval_path = open(os.path.join(self.paths.save_path, "eval.csv"), "a+")
-        for _ in range(self.args.eval_times):
-            er, es = self.eval()
-            print(er, es)
-            eval_rewards.append(er[0])
-            eval_path.write(str(er[0]) + "," + str(es[0]) + "\n")
-            eval_path.flush()
-        eval_path.close()
+        eval_file = Path(self.paths.save_path) / "eval.csv"
+        with open(eval_file, "a+") as eval_path:
+            for _ in range(self.args.eval_times):
+                er, es = self.eval()
+                print(er, es)
+                eval_rewards.append(er[0])
+                eval_path.write(str(er[0]) + "," + str(es[0]) + "\n")
+                eval_path.flush()
 
         return np.stack(eval_rewards).mean(), np.stack(eval_rewards).std()

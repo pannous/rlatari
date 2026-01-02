@@ -1,11 +1,16 @@
-import os
-import sys
+from __future__ import annotations
+
 import datetime
 import random
+import sys
+from pathlib import Path
+from typing import Callable
+
+import gymnasium as gym
 import hydra
 import numpy as np
 import torch
-import gymnasium as gym
+from omegaconf import DictConfig, OmegaConf
 from stable_baselines3.common.atari_wrappers import (
     ClipRewardEnv,
     EpisodicLifeEnv,
@@ -13,14 +18,13 @@ from stable_baselines3.common.atari_wrappers import (
     MaxAndSkipEnv,
     NoopResetEnv,
 )
-from omegaconf import OmegaConf
 
 from algorithms import atari_agents
 from utils.utils import Logger
 
 
-def make_env(env_name, seed, resize=84):
-    def thunk():
+def make_env(env_name: str, seed: int, resize: int = 84) -> Callable[[], gym.Env]:
+    def thunk() -> gym.Env:
         env = gym.make(env_name)
         env = gym.wrappers.RecordEpisodeStatistics(env)
         env = NoopResetEnv(env, noop_max=30)
@@ -39,22 +43,22 @@ def make_env(env_name, seed, resize=84):
     return thunk
 
 
-def make_save(cfg):
+def make_save(cfg: DictConfig) -> str:
     time = str(datetime.datetime.now().replace(microsecond=0).strftime("%Y.%m.%d.%H.%M.%S"))
-    cfg.save_path = os.path.join(cfg.base_path, time)
-    if not os.path.exists(cfg.save_path):
-        os.makedirs(cfg.save_path)
+    save_path = Path(cfg.base_path) / time
+    cfg.save_path = str(save_path)
+    save_path.mkdir(parents=True, exist_ok=True)
     if cfg.model:
-        cfg.model_path = os.path.join(cfg.save_path, "models")
-        if not os.path.exists(cfg.model_path):
-            os.makedirs(cfg.model_path)
+        model_path = save_path / "models"
+        cfg.model_path = str(model_path)
+        model_path.mkdir(parents=True, exist_ok=True)
     return time
 
-def run(args, stdout):
+def run(args: DictConfig, stdout) -> None:
     time = make_save(args)
     args.seed = random.randint(0, 100000)
-    OmegaConf.save(args, os.path.join(args.save_path, "config.yaml"))
-    sys.stdout = Logger(stdout, os.path.join(args.save_path, "logs.txt"))
+    OmegaConf.save(args, Path(args.save_path) / "config.yaml")
+    sys.stdout = Logger(stdout, str(Path(args.save_path) / "logs.txt"))
     print("============================================================")
     print("saving at:", args.save_path)
     # create train env and eval env
@@ -81,8 +85,8 @@ def run(args, stdout):
     sys.stdout.close()
 
 
-@hydra.main(config_path='cfgs', config_name='config', version_base=None)
-def main(cfg):
+@hydra.main(config_path="cfgs", config_name="config", version_base=None)
+def main(cfg: DictConfig) -> None:
     stdout = sys.stdout
     for r in range(cfg.run):
         run(cfg, stdout)
